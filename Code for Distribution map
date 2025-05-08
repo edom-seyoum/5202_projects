@@ -1,0 +1,91 @@
+library(dplyr)
+library(lubridate)
+
+n <- 300
+
+# Helper function to create random points
+generate_points <- function(n, lat_range, lon_range) {
+  data.frame(
+    Latitude = runif(n, lat_range[1], lat_range[2]),
+    Longitude = runif(n, lon_range[1], lon_range[2])
+  )
+}
+
+# 50% in South Eastern Ethiopia (e.g., Somali region)
+n_se <- round(0.5 * n)
+se <- generate_points(n_se, lat_range = c(4.5, 7.5), lon_range = c(40.0, 44.0))
+
+# 30% in North Eastern Ethiopia (e.g., Afar region)
+n_ne <- round(0.3 * n)
+ne <- generate_points(n_ne, lat_range = c(9.5, 12.5), lon_range = c(40.5, 42.5))
+
+# 20% sprinkled across Ethiopia
+n_other <- n - n_se - n_ne
+other <- generate_points(n_other, lat_range = c(5.5, 13.5), lon_range = c(34.5, 45.5))
+
+# Combine data
+geo_data <- bind_rows(se, ne, other)
+
+# Add metadata
+malaria_data <- geo_data %>%
+  mutate(
+    ID = 1:n,
+    Malaria_Status = sample(c("P. falciparum", "P. vivax", "Negative"), n, replace = TRUE, prob = c(0.5, 0.3, 0.2)),
+    Date_Reported = sample(seq(as.Date("2023-01-01"), as.Date("2024-12-31"), by = "day"), n, replace = TRUE)
+  )
+
+# Save to CSV
+write.csv(malaria_data, "malaria_data_ethiopia_300.csv", row.names = FALSE)
+# Install packages if not already installed
+install.packages(c("ggplot2", "sf", "rnaturalearth", "rnaturalearthdata", "dplyr"))
+
+# Load libraries
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(dplyr)
+
+# Load malaria data
+malaria_data <- read.csv("malaria_data_ethiopia_300.csv")
+
+# Load Ethiopia map from Natural Earth
+ethiopia <- ne_countries(scale = "medium", country = "Ethiopia", returnclass = "sf")
+
+# Convert malaria data to spatial object
+malaria_sf <- st_as_sf(malaria_data, coords = c("Longitude", "Latitude"), crs = 4326)
+
+# Plot
+ggplot() +
+  geom_sf(data = ethiopia, fill = "antiquewhite", color = "gray30") +
+  geom_sf(data = malaria_sf, aes(color = Malaria_Status), size = 1.8, alpha = 0.7) +
+  scale_color_manual(values = c("P. falciparum" = "red", "P. vivax" = "blue")) +
+  labs(
+    title = "Malaria Case Distribution in Ethiopia (Positive Cases Only)",
+    subtitle = "Includes P. falciparum and P. vivax cases only",
+    color = "Malaria Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+
+# Keep only points within Ethiopia
+malaria_inside <- malaria_sf[st_within(malaria_sf, ethiopia, sparse = FALSE), ]
+
+# Plot
+ggplot() +
+  geom_sf(data = ethiopia, fill = "antiquewhite", color = "gray30") +
+  geom_sf(data = malaria_inside, aes(color = Malaria_Status), size = 1.8, alpha = 0.7) +
+  scale_color_manual(values = c("P. falciparum" = "red", "P. vivax" = "blue")) +
+  labs(
+    title = "Malaria Case Distribution Within Ethiopia",
+    subtitle = "Filtered to include only P. falciparum and P. vivax cases inside national borders",
+    color = "Malaria Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
